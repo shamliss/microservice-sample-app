@@ -1,0 +1,78 @@
+# ============================================================
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: app
+  labels:
+    app: user-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: user-service
+  template:
+    metadata:
+      labels:
+        app: user-service
+    spec:
+      serviceAccountName: app-sa   # KSA bound to GSA with Cloud SQL Client role
+      containers:
+        # ── Application container ──────────────────────────────
+        - name: user-service
+          image: us-east1-docker.pkg.dev/white-watch-464115-t0/dev-microservices-repo/user-service:v1
+          ports:
+            - containerPort: 8081
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: user-service-db-secret
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: user-service-db-secret
+                  key: DB_PASSWORD
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "300m"
+              memory: "256Mi"
+
+        # ── Cloud SQL Auth Proxy sidecar ───────────────────────
+        # Listens on localhost:3306, app connects to 127.0.0.1:3306
+        - name: cloud-sql-proxy
+          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.11.0
+          args:
+            - "--structured-logs"
+            - "--port=3306"
+            - "--private-ip"
+            - "white-watch-464115-t0:us-east1:dev-mysql"  #cloudsql_connection_name
+          securityContext:
+            runAsNonRoot: true
+          resources:
+            requests:
+              cpu: "10m"
+              memory: "32Mi"
+            limits:
+              cpu: "50m"
+              memory: "64Mi"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: app
+spec:
+  selector:
+    app: user-service
+  ports:
+    - protocol: TCP
+      port: 8081
+      targetPort: 8081
+  type: ClusterIP
