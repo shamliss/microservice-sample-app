@@ -1,0 +1,133 @@
+# cloudbuild.yaml
+#
+# Trigger this directly off github.com/shamliss/microservice-sample-app (master branch).
+# Cloud Build checks out that repo automatically as /workspace — no separate
+# "clone GitHub repo" step is needed like in the Azure pipeline, since Azure
+# had to clone it explicitly (the Azure repo itself was just a wrapper).
+#
+# Auth note: no WIF task needed. Cloud Build already runs as the project's
+# Cloud Build service account (or a custom one you assign), which is GCP-native.
+# Just grant that service account the right IAM roles (see notes at bottom).
+
+steps:
+
+  # ---------- Maven builds (parallel, each independent) ----------
+  - name: 'maven:3.9-eclipse-temurin-17'
+    id: 'mvn-build-order'
+    dir: 'order_service'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        chmod +x mvnw
+        ./mvnw clean package -DskipTests
+    waitFor: ['-']  # start immediately, don't wait on previous steps
+
+  - name: 'maven:3.9-eclipse-temurin-17'
+    id: 'mvn-build-product'
+    dir: 'product_service'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        chmod +x mvnw
+        ./mvnw clean package -DskipTests
+    waitFor: ['-']
+
+  - name: 'maven:3.9-eclipse-temurin-17'
+    id: 'mvn-build-user'
+    dir: 'user_service'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        chmod +x mvnw
+        ./mvnw clean package -DskipTests
+    waitFor: ['-']
+
+  # ---------- Docker build (each waits only on its own mvn step) ----------
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'docker-build-order'
+    args: ['build', '-t', '${_ORDER_IMAGE}:${_IMAGE_VERSION}', './order_service']
+    waitFor: ['mvn-build-order']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'docker-build-product'
+    args: ['build', '-t', '${_PRODUCT_IMAGE}:${_IMAGE_VERSION}', './product_service']
+    waitFor: ['mvn-build-product']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'docker-build-user'
+    args: ['build', '-t', '${_USER_IMAGE}:${_IMAGE_VERSION}', './user_service']
+    waitFor: ['mvn-build-user']
+
+  # ---------- Docker push ----------
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'docker-push-order'
+    args: ['push', '${_ORDER_IMAGE}:${_IMAGE_VERSION}']
+    waitFor: ['docker-build-order']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'docker-push-product'
+    args: ['push', '${_PRODUCT_IMAGE}:${_IMAGE_VERSION}']
+    waitFor: ['docker-build-product']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'docker-push-user'
+    args: ['push', '${_USER_IMAGE}:${_IMAGE_VERSION}']
+    waitFor: ['docker-build-user']
+
+  # ---------- GKE deploy (waits for all three pushes) ----------
+  - name: 'gcr.io/cloud-builders/gke-deploy'
+    id: 'gke-get-credentials'
+    entrypoint: gcloud
+    args:
+      - 'container'
+      - 'clusters'
+      - 'get-credentials'
+      - '${_GKE_CLUSTER_NAME}'
+      - '--zone=${_GKE_CLUSTER_ZONE}'
+      - '--project=${PROJECT_ID}'
+    waitFor: ['docker-push-order', 'docker-push-product', 'docker-push-user']
+
+  - name: 'gcr.io/cloud-builders/kubectl'
+    id: 'kubectl-apply'
+    args: ['apply', '-f', '${_MANIFESTS_DIR}/']
+    env:
+      - 'CLOUDSDK_COMPUTE_ZONE=${_GKE_CLUSTER_ZONE}'
+      - 'CLOUDSDK_CONTAINER_CLUSTER=${_GKE_CLUSTER_NAME}'
+    waitFor: ['gke-get-credentials']
+
+  - name: 'gcr.io/cloud-builders/kubectl'
+    id: 'kubectl-rollout-status'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        kubectl rollout status deployment/order-service   --timeout=5m -n app
+        kubectl rollout status deployment/product-service --timeout=5m -n app
+        kubectl rollout status deployment/user-service    --timeout=5m -n app
+    env:
+      - 'CLOUDSDK_COMPUTE_ZONE=${_GKE_CLUSTER_ZONE}'
+      - 'CLOUDSDK_CONTAINER_CLUSTER=${_GKE_CLUSTER_NAME}'
+    waitFor: ['kubectl-apply']
+
+images:
+  - '${_ORDER_IMAGE}:${_IMAGE_VERSION}'
+  - '${_PRODUCT_IMAGE}:${_IMAGE_VERSION}'
+  - '${_USER_IMAGE}:${_IMAGE_VERSION}'
+
+substitutions:
+  _AR_HOST:           'us-east1-docker.pkg.dev'
+  _AR_REPO:           'dev-microservices-repo'
+  _ORDER_IMAGE:       '${_AR_HOST}/${PROJECT_ID}/${_AR_REPO}/order-service'
+  _PRODUCT_IMAGE:     '${_AR_HOST}/${PROJECT_ID}/${_AR_REPO}/product-service'
+  _USER_IMAGE:        '${_AR_HOST}/${PROJECT_ID}/${_AR_REPO}/user-service'
+  _IMAGE_VERSION:     'v1'
+  _GKE_CLUSTER_NAME:  'useractivitymonitoring-poc'
+  _GKE_CLUSTER_ZONE:  'us-east1-d'
+  _MANIFESTS_DIR:     'gke-manifests'
+  _REGION:            'us-east1'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
