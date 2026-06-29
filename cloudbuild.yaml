@@ -118,11 +118,9 @@ images:
   - '${_USER_IMAGE}:${_IMAGE_VERSION}'
 
 substitutions:
-  _AR_HOST:           'us-east1-docker.pkg.dev'
-  _AR_REPO:           'dev-microservices-repo'
-  _ORDER_IMAGE:       '${_AR_HOST}/${PROJECT_ID}/${_AR_REPO}/order-service'
-  _PRODUCT_IMAGE:     '${_AR_HOST}/${PROJECT_ID}/${_AR_REPO}/product-service'
-  _USER_IMAGE:        '${_AR_HOST}/${PROJECT_ID}/${_AR_REPO}/user-service'
+  _ORDER_IMAGE:       'us-east1-docker.pkg.dev/${PROJECT_ID}/dev-microservices-repo/order-service'
+  _PRODUCT_IMAGE:     'us-east1-docker.pkg.dev/${PROJECT_ID}/dev-microservices-repo/product-service'
+  _USER_IMAGE:        'us-east1-docker.pkg.dev/${PROJECT_ID}/dev-microservices-repo/user-service'
   _IMAGE_VERSION:     'v1'
   _GKE_CLUSTER_NAME:  'useractivitymonitoring-poc'
   _GKE_CLUSTER_ZONE:  'us-east1-d'
