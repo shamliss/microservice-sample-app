@@ -125,7 +125,6 @@ substitutions:
   _GKE_CLUSTER_NAME:  'useractivitymonitoring-poc'
   _GKE_CLUSTER_ZONE:  'us-east1-d'
   _MANIFESTS_DIR:     'gke-manifests'
-  _REGION:            'us-east1'
 
 options:
   logging: CLOUD_LOGGING_ONLY
