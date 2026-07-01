@@ -122,8 +122,8 @@ substitutions:
   _PRODUCT_IMAGE:     'us-east1-docker.pkg.dev/${PROJECT_ID}/dev-microservices-repo/product-service'
   _USER_IMAGE:        'us-east1-docker.pkg.dev/${PROJECT_ID}/dev-microservices-repo/user-service'
   _IMAGE_VERSION:     'v1'
-  _GKE_CLUSTER_NAME:  'useractivitymonitoring-poc'
-  _GKE_CLUSTER_ZONE:  'us-east1-d'
+  _GKE_CLUSTER_NAME:  'dev-gke'
+  _GKE_CLUSTER_ZONE:  'us-east1-b'
   _MANIFESTS_DIR:     'gke-manifests'
 
 options:
